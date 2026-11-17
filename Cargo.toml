@@ -1,0 +1,31 @@
+[package]
+name = "animator_ui"
+version = "0.1.0"
+edition = "2024"
+description = "Pixel Sprite Studio: text-to-sprite (pixelsprite canvas v2) and sprite animation (AnimGPT) on ONNX Runtime"
+publish = false
+
+[dependencies]
+# ONNX Runtime 1.31. "cuda" + "directml" make ort-sys download pyke's Windows build
+# `cuda13,tensorrt,nvrtx,directml` (one onnxruntime.dll with CUDA 13, DirectML and CPU EPs).
+ort = { version = "=2.0.0-rc.15", features = ["cuda", "directml"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "clipboard"] }
+tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+gif = "0.14"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+debug = false
+
+# The sampler loops are hot; keep them fast in dev builds too.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

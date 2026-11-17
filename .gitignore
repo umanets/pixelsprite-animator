@@ -1,0 +1,10 @@
+target/
+target_*/
+models/
+exports/
+dist/
+animator_ui.json
+.desloppify/
+scorecard.png
+parity/node_modules/
+parity/package*.json

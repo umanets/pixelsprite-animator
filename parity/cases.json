@@ -1,0 +1,224 @@
+[
+ {
+  "name": "burger_skull_16_s3",
+  "text": "burger skull",
+  "size": 16,
+  "n": 8,
+  "seed": 3
+ },
+ {
+  "name": "burger_skull_32_s3",
+  "text": "burger skull",
+  "size": 32,
+  "n": 4,
+  "seed": 3
+ },
+ {
+  "name": "potion_skull_16_s3",
+  "text": "potion skull",
+  "size": 16,
+  "n": 8,
+  "seed": 3
+ },
+ {
+  "name": "potion_skull_32_s3",
+  "text": "potion skull",
+  "size": 32,
+  "n": 4,
+  "seed": 3
+ },
+ {
+  "name": "sword_carrot_16_s7",
+  "text": "sword carrot",
+  "size": 16,
+  "n": 8,
+  "seed": 7
+ },
+ {
+  "name": "sword_carrot_32_s7",
+  "text": "sword carrot",
+  "size": 32,
+  "n": 4,
+  "seed": 7
+ },
+ {
+  "name": "fried_burger_skull_16_s5",
+  "text": "fried burger skull",
+  "size": 16,
+  "n": 8,
+  "seed": 5
+ },
+ {
+  "name": "burger_skull_16_n20_s11",
+  "text": "burger skull",
+  "size": 16,
+  "n": 20,
+  "seed": 11
+ },
+ {
+  "name": "burger_skull_24_s3",
+  "text": "burger skull",
+  "size": 24,
+  "n": 4,
+  "seed": 3
+ },
+ {
+  "name": "burger_skull_32_inside_s3",
+  "text": "burger skull",
+  "size": 32,
+  "n": 4,
+  "seed": 3,
+  "variants": [
+   "inside"
+  ]
+ },
+ {
+  "name": "frost_sword_16_s0",
+  "text": "frost sword",
+  "size": 16,
+  "n": 8,
+  "seed": 0
+ },
+ {
+  "name": "frost_sword_obj_16_s0",
+  "text": "frost sword",
+  "size": 16,
+  "n": 8,
+  "seed": 0,
+  "overrides": {
+   "frost": "object"
+  }
+ },
+ {
+  "name": "burger_skull_16_exact_s3",
+  "text": "burger skull",
+  "size": 16,
+  "n": 8,
+  "seed": 3,
+  "encoderReady": true
+ },
+ {
+  "name": "burger_skull_16_cpurows_s3",
+  "text": "burger skull",
+  "size": 16,
+  "n": 8,
+  "seed": 3,
+  "demoEp": "wasm"
+ },
+ {
+  "name": "cyr_skull_burger_16_s3",
+  "text": "череп бургер",
+  "size": 16,
+  "n": 8,
+  "seed": 3
+ },
+ {
+  "name": "knight_plain_16_s1",
+  "text": "knight",
+  "size": 16,
+  "n": 8,
+  "seed": 1,
+  "gShape": 1,
+  "gColour": 1
+ },
+ {
+  "name": "knight_split_16_s2",
+  "text": "knight",
+  "size": 16,
+  "n": 8,
+  "seed": 2,
+  "gShape": 1.5,
+  "gColour": 2.5,
+  "temperature": 0.8,
+  "topP": 0.9
+ },
+ {
+  "name": "ninja_split_32_s4",
+  "text": "ninja",
+  "size": 32,
+  "n": 4,
+  "seed": 4
+ },
+ {
+  "name": "knight_split_16_n12_s8",
+  "text": "knight",
+  "size": 16,
+  "n": 12,
+  "seed": 8
+ },
+ {
+  "name": "no_text_16_s9",
+  "text": "",
+  "size": 16,
+  "n": 8,
+  "seed": 9
+ },
+ {
+  "name": "mask_draw_16_s5",
+  "text": "red potion",
+  "size": 16,
+  "n": 8,
+  "seed": 5,
+  "mode": "draw",
+  "mask": [
+   "................",
+   "................",
+   "......####......",
+   "......####......",
+   ".......##.......",
+   ".......##.......",
+   ".......##.......",
+   "....########....",
+   "....########....",
+   "...##########...",
+   "...##########...",
+   "...##########...",
+   "....########....",
+   "....########....",
+   "......####......",
+   "................"
+  ]
+ },
+ {
+  "name": "mask_draw_24_s5",
+  "text": "blue mushroom",
+  "size": 24,
+  "n": 4,
+  "seed": 5,
+  "mode": "draw",
+  "mask": [
+   "........................",
+   "........................",
+   ".........######.........",
+   ".......##########.......",
+   ".....##############.....",
+   "....################....",
+   "....################....",
+   "...##################...",
+   "...######......######...",
+   "..######........######..",
+   "..######........######..",
+   "..######........######..",
+   "..######........######..",
+   "..######........######..",
+   "..######........######..",
+   "...######......######...",
+   "...##################...",
+   "....################....",
+   "....################....",
+   ".....##############.....",
+   ".......##########.......",
+   ".........######.........",
+   "........................",
+   "........................"
+  ]
+ },
+ {
+  "name": "mask_same_16_s6",
+  "text": "golden crown",
+  "size": 16,
+  "n": 8,
+  "seed": 6,
+  "mode": "same"
+ }
+]
