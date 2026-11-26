@@ -8,10 +8,11 @@ Start
 1. Unzip the folder anywhere you can write to (not "Program Files").
 2. Run PixelSpriteStudio.exe.
    Windows SmartScreen may warn about an unsigned app: "More info" -> "Run anyway".
-3. First start: the app downloads its models (about 400 MB) into the "models" folder next to
+3. First start: the app downloads its models (about 500 MB) into the "models" folder next to
    the exe. The status bar at the bottom shows the progress. This happens once and needs an
    internet connection.
-4. Type a caption, press Generate, click a sprite, pick an action on the right.
+4. Type a caption, press Generate, click a sprite, pick an action on the right, press Animate.
+   Or animate your own sprite: "Load PNG..." (or drop the file on the window).
 
 Graphics card
 -------------

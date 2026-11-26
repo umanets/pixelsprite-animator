@@ -8,9 +8,34 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+/// One model of `models` in `animator_ui.json`: a Hugging Face repo (`repo`, optional `revision`) or a local folder
+/// (`dir`, which wins when both are given). See `files::ModelSource` for how it is resolved.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct ModelRef {
+    /// `owner/name` or `https://huggingface.co/owner/name`. Default: the built-in repo of that model.
+    pub repo: Option<String>,
+    /// Commit, tag or branch. Default: the pinned commit for the built-in repo, `main` for any other repo.
+    pub revision: Option<String>,
+    /// Local folder laid out as the repo (`onnx/...`); a relative path is taken from the app folder.
+    pub dir: Option<PathBuf>,
+}
+
+/// The pair of models the app works with (`models` in `animator_ui.json`); a missing entry = the built-in model.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct Models {
+    /// Text -> sprite.
+    pub generator: Option<ModelRef>,
+    /// Sprite -> views / animation frames.
+    pub animator: Option<ModelRef>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    /// The generator and the animator to use (Hugging Face repos or local folders). Default: the built-in pair.
+    pub models: Option<Models>,
     /// Folder with the released v2 model (`onnx/decoder.onnx`, `onnx/decoder.f16`, ..., `palette.json`).
     /// Default: `<app root>/../release/hf`; if it does not exist the files are downloaded from Hugging Face.
     pub model_src: Option<PathBuf>,
@@ -181,6 +206,15 @@ mod tests {
     fn missing_file_gives_defaults() {
         let path = temp_file("missing");
         assert!(Config::try_load_from(&path).is_ok());
+    }
+
+    #[test]
+    fn models_pair_is_read() {
+        let path = temp_file("models");
+        std::fs::write(&path, r#"{"models": {"generator": {"repo": "a/b", "revision": "abc"}, "animator": {"dir": "D:/m/anim"}}}"#).unwrap();
+        let m = Config::try_load_from(&path).unwrap().models.unwrap();
+        assert_eq!(m.generator.unwrap(), ModelRef { repo: Some("a/b".into()), revision: Some("abc".into()), dir: None });
+        assert_eq!(m.animator.unwrap().dir, Some(PathBuf::from("D:/m/anim")));
     }
 
     #[test]

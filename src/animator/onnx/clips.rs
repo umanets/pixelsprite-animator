@@ -219,12 +219,23 @@ impl OnnxAnimator {
             azimuths.iter().copied().filter(|&az| !cache.contains_key(&self.key(&r, ki, refk, view_i, az, &st))).collect()
         };
         if !missing.is_empty() {
+            let t0 = Instant::now();
             self.with_engine(ctl, |eng| {
-                for g in missing.chunks(eng.max_batch(r.size)) {
+                let groups: Vec<&[u16]> = missing.chunks(eng.max_batch(r.size)).collect();
+                let (total, n) = (groups.len() as f32, r.size * r.size);
+                for (gi, g) in groups.into_iter().enumerate() {
+                    let label = format!("views {}", g.iter().map(|a| format!("{a}°")).collect::<Vec<_>>().join(", "));
+                    let mut last = Instant::now();
+                    let mut progress = |px: usize| {
+                        if px == 0 || px + 1 == n || last.elapsed().as_millis() >= 100 {
+                            last = Instant::now();
+                            ctl.report(AnimProgress { stage: label.clone(), frac: (gi as f32 + (px + 1) as f32 / n as f32) / total, secs: t0.elapsed().as_secs_f64() });
+                        }
+                    };
                     let conds = g.iter().map(|&az| t.cond(kind, refk, "view", az, 0)).collect::<Result<Vec<_>>>()?;
                     let rows: Vec<RowSpec> = conds.iter().map(|&c| RowSpec { cond: c, reference: &r.tokens, prev: &r.tokens, allowed: &r.allowed, force: None }).collect();
                     let mut rngs: Vec<Mulberry32> = g.iter().map(|&az| Mulberry32::new(row_seed(st.seed, ki, view_i, t.az_index(az).unwrap_or(0), r.size))).collect();
-                    let out = eng.run_rows(r.size, &rows, &mut rngs, st.temperature, ctl.cancel, &mut |_| {})?;
+                    let out = eng.run_rows(r.size, &rows, &mut rngs, st.temperature, ctl.cancel, &mut progress)?;
                     let mut cache = self.cache.lock().unwrap();
                     for (&az, tok) in g.iter().zip(out.tokens) {
                         cache.insert(self.key(&r, ki, refk, view_i, az, &st), Arc::new(vec![tok]));
@@ -254,7 +265,7 @@ impl OnnxAnimator {
                 let frames = resample(&frames, req.n_frames);
                 Animation {
                     note: format!(
-                        "model anim39: {} at {az}°, {} of {native} frames, {}px, T {:.2}, seed {}, ref {}{}",
+                        "model animgpt-v3: {} at {az}°, {} of {native} frames, {}px, T {:.2}, seed {}, ref {}{}",
                         req.action,
                         frames.len(),
                         r.size,

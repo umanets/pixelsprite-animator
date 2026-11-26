@@ -37,8 +37,16 @@ impl State {
             vecs.insert(c.text.clone(), v);
         }
         let Some(pl) = mix::plan(&concepts, &mo.enabled) else { return Ok(None) };
+        // the outline command: every mixed word and the whole caption are encoded with the words the generator
+        // was trained with at their end ("knight, no outline"), so a mix keeps the command; the kinds above come
+        // from the plain words
+        let suffix = super::messages::outline_suffix(mo.outline);
         let mut vectors = Vec::with_capacity(pl.concepts.len());
         for c in &pl.concepts {
+            if !suffix.is_empty() {
+                vectors.push(self.encoder()?.encode(&format!("{}{suffix}", c.text))?);
+                continue;
+            }
             vectors.push(match (vecs.get(&c.text), lex.vector_of(&c.text)) {
                 (Some(v), _) => v.clone(),
                 (None, Some(v)) => v.to_vec(),
@@ -50,7 +58,9 @@ impl State {
         }
         let (mut caption, mut caption_exact) = (None, false);
         if pl.kinds.contains(&VariantKind::Caption) {
-            if let Some(v) = self.presets.get(text) {
+            if !suffix.is_empty() {
+                (caption, caption_exact) = (Some(self.encoder()?.encode(&format!("{text}{suffix}"))?), true);
+            } else if let Some(v) = self.presets.get(text) {
                 (caption, caption_exact) = (Some(v.clone()), true);
             } else if ready {
                 (caption, caption_exact) = (Some(self.encoder()?.encode(text)?), true);
@@ -73,7 +83,7 @@ impl State {
             params.mask = None;
         }
         let prepared = if req.mode == Mode::New { self.prepare_mix(&caption, &mut mo)? } else { None };
-        params.vector = if prepared.is_some() { None } else { self.vector_for(&caption)? };
+        params.vector = if prepared.is_some() { None } else { self.vector_for(&caption, super::messages::outline_suffix(mo.outline))? };
         let encode_secs = t0.elapsed().as_secs_f64();
         let model = self.model.as_mut().ok_or_else(|| anyhow::anyhow!("the model is not loaded"))?;
         if params.batch == 0 {

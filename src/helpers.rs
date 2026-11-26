@@ -58,29 +58,23 @@ pub(crate) fn default_count(size: usize) -> usize {
 }
 
 /// A native file picker for the dropzone (falls back to the path field when the dialog fails).
-pub(crate) fn pick_png() -> Option<PathBuf> {
-    let mut chosen = None;
+/// Opens the Windows file dialog in a helper process and returns at once; the chosen path (or None when the
+/// dialog was cancelled) arrives on the receiver. The dialog must not block the UI thread: the user may take as
+/// long as they like.
+pub(crate) fn pick_png(wake: impl Fn() + Send + 'static) -> std::sync::mpsc::Receiver<Option<PathBuf>> {
     let (tx, rx) = std::sync::mpsc::channel::<Option<PathBuf>>();
     std::thread::spawn(move || {
         use std::process::{Command, Stdio};
-        let ps = "Add-Type -AssemblyName System.Windows.Forms; $o = New-Object System.Windows.Forms.OpenFileDialog; \
-                  $o.Filter = 'PNG sprites|*.png'; $o.Title = 'Pick a sprite PNG'; \
-                  if ($o.ShowDialog() -eq 'OK') { Write-Output $o.FileName }";
-        let out = Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", ps]).creation_flags(0x0800_0000).stdout(Stdio::piped()).output();
+        // a hidden top-most owner keeps the dialog in front of the app window
+        let ps = "Add-Type -AssemblyName System.Windows.Forms;                   $owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true; ShowInTaskbar = $false; Opacity = 0};                   $o = New-Object System.Windows.Forms.OpenFileDialog;                   $o.Filter = 'PNG images|*.png'; $o.Title = 'Pick a sprite PNG';                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;                   if ($o.ShowDialog($owner) -eq 'OK') { Write-Output $o.FileName }";
+        let out = Command::new("powershell").args(["-NoProfile", "-STA", "-Command", ps]).creation_flags(0x0800_0000).stdin(Stdio::null()).stdout(Stdio::piped()).output();
         let _ = tx.send(match out {
-            Ok(o) if o.status.success() => Some(PathBuf::from(String::from_utf8_lossy(&o.stdout).trim().to_string())),
+            Ok(o) if o.status.success() => Some(PathBuf::from(String::from_utf8_lossy(&o.stdout).trim().to_string())).filter(|p| p.is_file()),
             _ => None,
         });
+        wake();
     });
-    // a short wait: the picker must answer before the frame ends
-    for _ in 0..200 {
-        if let Ok(v) = rx.try_recv() {
-            chosen = v.filter(|p| p.is_file());
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    chosen
+    rx
 }
 
 /// The demo's small variant diagrams (mix.js `icon`): the first object in the accent colour, the second in grey.

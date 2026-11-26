@@ -146,7 +146,7 @@ pub(super) fn anchor_eval(cfg: &Config) -> anyhow::Result<()> {
     }
 
     // ---- the animation model
-    let anim = OnnxAnimator::new();
+    let anim = OnnxAnimator::with_dir(animator_ui::files::animator_dir(&cfg));
     let opts = SessionOpts { cuda_mem_limit_mb: arg("--anim-mem").and_then(|s| s.parse().ok()).or(cfg.anim_cuda_mem_limit_mb).unwrap_or(ANIM_CUDA_MEM_LIMIT_MB), ..Default::default() };
     anim.set_providers(choice.order(), opts);
     let t = anim.tables()?;

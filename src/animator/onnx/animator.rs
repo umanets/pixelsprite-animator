@@ -37,7 +37,7 @@ impl Default for OnnxAnimator {
 
 impl OnnxAnimator {
     pub fn new() -> Self {
-        Self::with_dir(crate::config::models_dir().join("animator"))
+        Self::with_dir(crate::files::builtin_animator_dir())
     }
 
     pub fn with_dir(dir: PathBuf) -> Self {
@@ -154,6 +154,29 @@ impl OnnxAnimator {
         let mut back = HashMap::new();
         let mut approximated = 0;
         let mut map: HashMap<i16, u16> = HashMap::new();
+        // The ink. The sprites the model learned from are drawn with a near-black outline (the darkest colour of
+        // 62 % of them is (20, 15, 11), nearly all others are within a few units of black), and the model draws
+        // only with the reference's colours: without a near-black one it draws nothing, or an object. So a sprite
+        // whose darkest colour is dark but not near-black (a purple or navy outline) is shown to the model with
+        // that colour as the ink token, and the ink is turned back into the sprite's own colour in the frames:
+        // the sprite looks the same, the model sees the outline it knows.
+        let luma = |c: [u8; 3]| 0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32;
+        let mut ink_for: Option<i16> = None;
+        if !identity {
+            let mut used: Vec<i16> = sprite.px.iter().copied().filter(|&p| p >= 0 && (p as usize) < sprite.palette.len()).collect();
+            used.sort_unstable();
+            used.dedup();
+            let model_colour = |p: i16| {
+                let c = sprite.palette[p as usize];
+                t.palette[t.rgb.get(&c).copied().unwrap_or_else(|| nearest(&t.palette, c)) as usize]
+            };
+            let has_ink = used.iter().any(|&p| luma(model_colour(p)) < INK_LUMA);
+            let darkest = used.iter().copied().min_by(|&a, &b| luma(sprite.palette[a as usize]).total_cmp(&luma(sprite.palette[b as usize])));
+            if let Some(d) = darkest.filter(|&d| !has_ink && luma(sprite.palette[d as usize]) < DARK_LUMA) {
+                ink_for = Some(d);
+            }
+        }
+        let ink = nearest(&t.palette, INK);
         let tokens: Vec<u16> = sprite
             .px
             .iter()
@@ -166,10 +189,14 @@ impl OnnxAnimator {
                 }
                 *map.entry(p).or_insert_with(|| {
                     let c = sprite.palette[p as usize];
-                    let tok = t.rgb.get(&c).copied().unwrap_or_else(|| {
-                        approximated += 1;
-                        nearest(&t.palette, c)
-                    });
+                    let tok = if ink_for == Some(p) {
+                        ink
+                    } else {
+                        t.rgb.get(&c).copied().unwrap_or_else(|| {
+                            approximated += 1;
+                            nearest(&t.palette, c)
+                        })
+                    };
                     back.entry(tok).or_insert(p);
                     tok
                 })
@@ -237,6 +264,13 @@ pub(super) fn describe_group(g: &[(String, u16, usize, usize)]) -> String {
         .join(", ")
 }
 
+/// The outline colour of the training sprites (see [`OnnxAnimator::reference`]).
+const INK: [u8; 3] = [28, 24, 30];
+/// A model colour below this luma counts as ink.
+const INK_LUMA: f32 = 32.0;
+/// A sprite colour below this luma is dark enough to stand in for the ink.
+const DARK_LUMA: f32 = 90.0;
+
 fn nearest(palette: &[[u8; 3]], c: [u8; 3]) -> u16 {
     let d = |p: &[u8; 3]| (0..3).map(|i| (p[i] as i32 - c[i] as i32).pow(2)).sum::<i32>();
     palette.iter().enumerate().min_by_key(|(_, p)| d(p)).map(|(i, _)| i as u16).unwrap_or(0)
@@ -273,9 +307,10 @@ impl Animator for OnnxWith<'_> {
 
 impl Animator for OnnxAnimator {
     fn name(&self) -> &str {
-        "ONNX model (anim39)"
+        "ONNX model (animgpt-v3)"
     }
-    /// The dataset's actions per kind (the model was trained on all of them).
+    /// The dataset's actions per kind (the model was trained on all of them). Objects only with a model that
+    /// knows the kind "object" (AnimGPT3).
     fn actions(&self, kind: Kind) -> Vec<ActionSpec> {
         standard_actions(kind)
     }

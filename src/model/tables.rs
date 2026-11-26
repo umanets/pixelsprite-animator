@@ -27,6 +27,9 @@ struct EmbInfo {
     empty: usize,
     bos: usize,
     kinds: Kinds,
+    /// The generator was trained with ", with outline" / ", no outline" at the end of its captions.
+    #[serde(default)]
+    outline_words: bool,
 }
 
 /// Everything except the session: tables, sizes, palette. Builds the input vectors.
@@ -43,6 +46,9 @@ pub struct ModelCore {
     pub max_size: usize,
     pub kinds: Kinds,
     pub text_dim: usize,
+    /// The model understands ", with outline" / ", no outline" at the end of a caption (`outline_words` of
+    /// embeddings.json): the UI then offers the Outline checkbox.
+    pub outline_words: bool,
     pub palette: Palette,
     data: Vec<f32>,
     idx: HashMap<String, (usize, Vec<usize>)>,
@@ -71,6 +77,7 @@ impl ModelCore {
         }
         let text_dim = idx.get("cond_proj.weight").map(|(_, s)| s[1]).ok_or_else(|| anyhow!("no cond_proj.weight"))?;
         Ok(ModelCore {
+            outline_words: info.outline_words,
             d: info.d_model,
             n_layers: info.n_layers,
             n_heads: info.n_heads,

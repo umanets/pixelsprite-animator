@@ -40,7 +40,11 @@ impl App {
                 if r.caption.is_empty() { "no text".to_string() } else { format!("\u{201c}{}\u{201d}", r.caption) },
                 format!("{0}×{0} · seed {1} · {2} sprites", r.size, r.seed, r.cards.len()),
             ),
-            (None, None) => ("No sprite selected yet".to_string(), "generate or pick one".into()),
+            (None, None) => match (self.selected, self.selected_sprite()) {
+                (Some(Selection::Loaded), Some((s, name, _))) => (name, format!("{0}×{0} · loaded image", s.size)),
+                (Some(_), Some((s, cap, _))) => (cap, format!("{0}×{0} · library", s.size)),
+                _ => ("No sprite selected yet".to_string(), "generate or pick one".into()),
+            },
         };
         let (header, _) = ui.allocate_exact_size(vec2(ui.available_width(), 41.0), Sense::hover());
         let p = ui.painter().clone();
@@ -79,7 +83,7 @@ impl App {
     /// frame and a «selected» tag; cards still being drawn say «drawing…» / «queued».
     pub(crate) fn gallery(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let p = ui.painter().clone();
-        if self.runs.is_empty() {
+        if self.runs.is_empty() && self.loaded.is_none() {
             ui.add(egui::Label::new(kit::txt("Nothing yet: type a caption and press Generate.", 13.0).color(theme::TEXT_SECONDARY)));
             return;
         }
@@ -87,6 +91,34 @@ impl App {
         let mut ctx_action: Option<(CardAction, u64, usize)> = None;
         let gap = 12.0;
         let cell = ((ui.available_width() - 3.0 * gap) / 4.0).floor().max(96.0);
+        // the loaded image is the gallery's first card
+        if let Some((sprite, name, _)) = &self.loaded {
+            let tex = match &self.loaded_tex {
+                Some((id, t)) if *id == self.loaded_id => t.clone(),
+                _ => {
+                    let t = texture(ctx, "loaded", sprite);
+                    self.loaded_tex = Some((self.loaded_id, t.clone()));
+                    t
+                }
+            };
+            let (rect, resp) = ui.allocate_exact_size(Vec2::splat(cell), Sense::click());
+            let resp = resp.on_hover_text(name);
+            kit::checker(ui, rect, (cell / sprite.size as f32).max(6.0));
+            p.image(tex.id(), rect.shrink(1.0), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            let sel = self.selected == Some(Selection::Loaded);
+            let tag = Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(58.0, 18.0));
+            if sel {
+                kit::select_frame(ui, rect, theme::R_CARD);
+                kit::tag_at(ui, tag, "selected", theme::ACCENT_SELECT, theme::ON_SELECT, theme::R_CHIP);
+            } else {
+                p.rect_stroke(rect, theme::R_CARD, Stroke::new(1.0, theme::BORDER_SUBTLE), StrokeKind::Inside);
+                kit::tag_at(ui, tag, "loaded", theme::BG_PANEL, theme::TEXT_SECONDARY, theme::R_CHIP);
+            }
+            if resp.clicked() {
+                select = Some(Selection::Loaded);
+            }
+            ui.add_space(gap);
+        }
         for run in &mut self.runs {
             let n = run.cards.len();
             let mut i = 0;
@@ -273,6 +305,7 @@ impl App {
                     let btn = Rect::from_min_size(pos2(header.right() - 16.0 - 90.0, header.center().y - 14.0), vec2(90.0, 28.0));
                     ui.scope_builder(egui::UiBuilder::new().max_rect(btn).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
                         if kit::button_h(ui, "Draw again", kit::Btn::Ghost, 28.0).clicked() {
+                            self.anim.go = true;
                             self.anim.key = None;
                         }
                     });
@@ -326,16 +359,62 @@ impl App {
             p.rect(hud, theme::R_CTRL, theme::BG_PANEL, Stroke::new(1.0, theme::BORDER_STRONG), StrokeKind::Inside);
             p.galley(pos2(hud.left() + 10.0, hud.center().y - gal.size().y / 2.0), gal, Color32::WHITE);
         } else {
+            let have_sprite = self.selected_sprite().is_some();
             let msg = if self.anim.pending.is_some() {
-                "the model draws the first view at this direction\u{2026}"
+                "the model draws the first view at this direction\u{2026}".to_owned()
+            } else if self.anim.idle {
+                format!("{} · {}° is not drawn yet", self.anim.action, self.anim.azimuth)
+            } else if have_sprite {
+                "this sprite has no animation with these settings".to_owned()
             } else {
-                "select a sprite and the animation appears here"
+                "generate a sprite on the left, or load your own image to animate it".to_owned()
             };
-            let gal = p.layout_no_wrap(msg.to_owned(), theme::font(13.0), theme::TEXT_SECONDARY);
-            p.galley(pos2(canvas.center().x - gal.size().x / 2.0, canvas.center().y - gal.size().y / 2.0), gal, Color32::WHITE);
+            // the sprite itself stands in the preview until its animation is drawn
+            let still = if self.anim.pending.is_none() { self.reference_tex(ctx) } else { None };
+            let mid = match &still {
+                Some((tex, size)) => {
+                    let size = *size as f32;
+                    let scale = (canvas.height() * 0.5 / size).min(canvas.width() * 0.45 / size).floor().clamp(1.0, 16.0);
+                    let spr = Rect::from_center_size(pos2(canvas.center().x, canvas.top() + canvas.height() * 0.38), Vec2::splat(size * scale));
+                    let sh = Rect::from_center_size(pos2(spr.center().x, spr.bottom() + 12.0), vec2(120.0, 8.0));
+                    p.rect_filled(sh, CornerRadius::same(4), Color32::from_rgba_unmultiplied(0, 0, 0, 64));
+                    p.image(tex.id(), spr, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                    canvas.bottom() - 78.0
+                }
+                None => canvas.center().y,
+            };
+            let gal = p.layout_no_wrap(msg, theme::font(13.0), theme::TEXT_SECONDARY);
+            p.galley(pos2(canvas.center().x - gal.size().x / 2.0, mid - gal.size().y / 2.0 - 30.0), gal, Color32::WHITE);
+            // the one button of this state: Animate (the model never starts by itself) or Load image
+            let label = if self.anim.pending.is_some() {
+                None
+            } else if self.anim.idle {
+                Some("Animate")
+            } else if !have_sprite {
+                Some(if self.png_pick.is_some() { "Pick a file in the dialog\u{2026}" } else { "Load image\u{2026}" })
+            } else {
+                None
+            };
+            if let Some(label) = label {
+                let bw = if self.anim.idle { 132.0 } else { 220.0 };
+                let btn = Rect::from_center_size(pos2(canvas.center().x, mid + 8.0), vec2(bw, 36.0));
+                let clicked = ui
+                    .scope_builder(egui::UiBuilder::new().max_rect(btn).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+                        kit::button_wh(ui, label, kit::Btn::Primary, bw, 36.0).clicked()
+                    })
+                    .inner;
+                if clicked {
+                    if self.anim.idle {
+                        self.anim.go = true;
+                        self.anim.key = None;
+                    } else {
+                        self.start_png_pick(ctx);
+                    }
+                }
+            }
             if let Some(e) = &self.anim.error {
                 let gal = p.layout(e.clone(), theme::font(12.0), theme::DANGER, canvas.width() - 80.0);
-                p.galley(pos2(canvas.center().x - gal.size().x / 2.0, canvas.center().y + 12.0), gal, Color32::WHITE);
+                p.galley(pos2(canvas.center().x - gal.size().x / 2.0, mid + 36.0), gal, Color32::WHITE);
             }
         }
 

@@ -82,6 +82,7 @@ impl State {
     }
 
     pub(super) fn load(&mut self, choice: EpChoice) -> Result<()> {
+        // (the default CUDA arena: see default_cuda_limit_mb below)
         let t0 = Instant::now();
         if self.files.is_none() {
             let tx = self.tx.clone();
@@ -92,7 +93,7 @@ impl State {
         }
         let files = self.files.clone().unwrap();
         self.model = None; // free the old session (and its GPU memory) first
-        let opts = SessionOpts { cuda_mem_limit_mb: self.cfg.cuda_mem_limit_mb.unwrap_or(2048), ..Default::default() };
+        let opts = SessionOpts { cuda_mem_limit_mb: self.cfg.cuda_mem_limit_mb.unwrap_or_else(|| default_cuda_limit_mb(&files.emb_json)), ..Default::default() };
         let mut fallbacks = files.notes.clone();
         for ep in choice.order() {
             self.send(Msg::Status(format!("Loading the sprite model on {}…", ep.label())));
@@ -133,7 +134,7 @@ impl State {
                 Err(e) => fallbacks.push(format!("no example captions: {e:#}")),
             }
         }
-        self.send(Msg::Loaded { ep, describe, fallbacks, secs: t0.elapsed().as_secs_f64(), palette, lexicon: self.lexicon.clone(), presets: self.preset_order.clone() });
+        self.send(Msg::Loaded { ep, describe, fallbacks, secs: t0.elapsed().as_secs_f64(), palette, lexicon: self.lexicon.clone(), presets: self.preset_order.clone(), outline_words: self.model.as_ref().is_some_and(|m| m.core.outline_words) });
         Ok(())
     }
 
@@ -142,13 +143,26 @@ impl State {
     }
 
     /// `vectorFor` of app.js: the precomputed vector of an example caption, else the text encoder; None = no text.
-    pub(super) fn vector_for(&mut self, caption: &str) -> Result<Option<Vec<f32>>> {
+    pub(super) fn vector_for(&mut self, caption: &str, suffix: &str) -> Result<Option<Vec<f32>>> {
         if caption.is_empty() {
             return Ok(None);
+        }
+        if !suffix.is_empty() {
+            return Ok(Some(self.encoder()?.encode(&format!("{caption}{suffix}"))?));
         }
         if let Some(v) = self.presets.get(caption) {
             return Ok(Some(v.clone()));
         }
         Ok(Some(self.encoder()?.encode(caption)?))
+    }
+}
+
+/// Default CUDA arena of the sprite model in MB: 2048 for the 12-layer, 512-wide model the limit was measured with,
+/// more for a bigger one in proportion to its key / value caches and weights (layers x width; 3584 for 14 x 768).
+pub(crate) fn default_cuda_limit_mb(emb_json: &std::path::Path) -> usize {
+    let dims = std::fs::read_to_string(emb_json).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v| Some((v["n_layers"].as_u64()?, v["d_model"].as_u64()?)));
+    match dims {
+        Some((layers, width)) => (2048 * layers * width / (12 * 512)).max(2048) as usize,
+        None => 2048,
     }
 }

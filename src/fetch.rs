@@ -22,6 +22,19 @@ pub fn quiet_command(program: &str) -> Command {
 /// Downloads `url` to `dest` (through `<dest>.part`, so a broken download never looks finished). `say` gets
 /// "<label>: 45 MB" lines while the file grows.
 pub fn download(url: &str, dest: &Path, label: &str, say: &mut dyn FnMut(String)) -> Result<()> {
+    download_auth(url, dest, label, say, None)
+}
+
+/// The Hugging Face access token of the `HF_TOKEN` environment variable (needed only for private or gated repos).
+pub fn hf_token() -> Option<String> {
+    let t = std::env::var("HF_TOKEN").ok()?;
+    let t = t.trim();
+    (!t.is_empty() && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')).then(|| t.to_owned())
+}
+
+/// [`download`] with an optional bearer token. The token goes to curl through its standard input (`--config -`),
+/// never on the command line; curl does not pass it on when the server redirects to another host.
+fn download_auth(url: &str, dest: &Path, label: &str, say: &mut dyn FnMut(String), bearer: Option<&str>) -> Result<()> {
     if let Some(dir) = dest.parent() {
         fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
@@ -30,15 +43,23 @@ pub fn download(url: &str, dest: &Path, label: &str, say: &mut dyn FnMut(String)
     let part = Path::new(&part).to_path_buf();
     let _ = fs::remove_file(&part);
     say(format!("Downloading {label}…"));
-    let mut child = quiet_command("curl.exe")
+    let mut cmd = quiet_command("curl.exe");
+    if bearer.is_some() {
+        cmd.args(["--config", "-"]);
+    }
+    let mut child = cmd
         .args(["-L", "--fail", "--silent", "--show-error", "--retry", "3", "--connect-timeout", "30", "-o"])
         .arg(&part)
         .arg(url)
-        .stdin(Stdio::null())
+        .stdin(if bearer.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .context("running curl.exe (it is part of Windows 10 1803 and later)")?;
+    if let (Some(token), Some(mut stdin)) = (bearer, child.stdin.take()) {
+        use std::io::Write;
+        let _ = writeln!(stdin, "header = \"Authorization: Bearer {token}\"");
+    }
     let mut last = 0;
     let status = loop {
         if let Some(st) = child.try_wait()? {
@@ -78,9 +99,18 @@ pub fn hf_files(repo: &str, revision: &str, files: &[&str], dest: &Path, say: &m
         if fs::metadata(&to).map(|m| m.len() > 0).unwrap_or(false) {
             continue;
         }
-        download(&hf_url(repo, revision, f), &to, &format!("{repo} · {f}"), say)?;
+        hf_file(repo, revision, f, &to, say)?;
     }
     Ok(())
+}
+
+/// Downloads one file of a Hugging Face repo to `dest` (with the `HF_TOKEN` token when it is set).
+pub fn hf_file(repo: &str, revision: &str, file: &str, dest: &Path, say: &mut dyn FnMut(String)) -> Result<()> {
+    let name = file.rsplit('/').next().unwrap_or(file);
+    let token = hf_token();
+    download_auth(&hf_url(repo, revision, file), dest, &format!("{repo} · {name}"), say, token.as_deref()).map_err(|e| {
+        if token.is_none() { e.context("if the repo is private, set the HF_TOKEN environment variable to a read token") } else { e }
+    })
 }
 
 #[cfg(test)]

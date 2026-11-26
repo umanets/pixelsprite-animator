@@ -16,13 +16,14 @@ These are straight exports from the release build on its first run, not hand-pic
 
 ## Download and run
 
-1. Download `PixelSpriteStudio-v0.1.0-win-x64.zip` from
-   [Releases](https://github.com/umanets/pixelsprite-animator/releases/latest) (81 MB) and unzip it anywhere you can
+1. Download the `PixelSpriteStudio-…-win-x64.zip` of the latest
+   [release](https://github.com/umanets/pixelsprite-animator/releases/latest) (81 MB) and unzip it anywhere you can
    write to.
 2. Run `PixelSpriteStudio.exe`. Windows SmartScreen may warn about an unsigned app: **More info → Run anyway**.
-3. **First start:** the app downloads its models into the `models` folder next to the exe — about 400 MB, once. The
+3. **First start:** the app downloads its models into the `models` folder next to the exe — about 500 MB, once. The
    status bar at the bottom shows the progress; it needs an internet connection.
-4. Type a caption, press **Generate**, click a sprite, pick an action on the right.
+4. Type a caption, press **Generate**, click a sprite, pick an action on the right and press **Animate**.
+   Or skip generation: **Load PNG…** (or drop a file on the window) and animate your own sprite.
 
 Requirements: Windows 10 (1803 or later) or Windows 11, x64. Nothing else has to be installed.
 
@@ -50,15 +51,21 @@ The processor path works but was not timed for this release.
 
 ## What it does
 
-**1 · Generate.** A port of the [pixelsprite web demo](https://umanets.github.io/pixelsprite/demo/): for the same
-caption, size, seed and settings it draws the demo's sprites, pixel for pixel. Captions in English, Russian and
+**1 · Generate.** The sprite model is pixelsprite canvas v3 (101 M parameters), run by a port of the
+[pixelsprite web demo](https://umanets.github.io/pixelsprite/demo/)'s engine. The web demo still runs the older
+canvas v2, so the same caption and seed give different sprites here. Captions in English, Russian and
 Ukrainian; sizes 16, 24 and 32 px; caption mixing (`burger skull` draws skull-burgers); draw a silhouette and let the
-model fill it; up to 32 sprites per run; save PNGs at ×1 – ×8. You can also drop in your own PNG sprite.
+model fill it; up to 32 sprites per run; save PNGs at ×1 – ×8.
 
-**2 · Animate.** The animation model (AnimGPT, 39 M parameters) takes one sprite, turns the character to each of 8
+**Or bring your own sprite.** Drop a PNG on the window or use **Load PNG…**: no generation needed. A 16 / 24 / 32 px
+sprite (or an integer upscale of one) is read as it is; any other image is cropped to its opaque part, upscaled
+pixel art is reduced back to one pixel per block, and anything larger is shrunk to 32 px.
+
+**2 · Animate.** The animation model (AnimGPT v3, 39 M parameters) takes one sprite, turns the character to each of 8
 directions and draws the action frame by frame, using only the colours of your sprite. Humans have 17 actions (idle,
 walk, run, jump, punch, kick, slash, cast, …), four-legged animals walk and run, birds fly. A **fight scene** strings
-walk, kicks, punches and a run into one timeline.
+walk, kicks, punches and a run into one timeline. The model draws only when you press **Animate** or **Build the
+scene**; clips it has already drawn are shown at once.
 
 **3 · Export.** A sprite sheet (PNG), a GIF, an 8-direction sheet, the scene as a GIF.
 
@@ -66,7 +73,7 @@ walk, kicks, punches and a run into one timeline.
 
 This is a research release, and the two models are small.
 
-* **Sprites** are as good as the web demo's.
+* **Sprites** come from canvas v3, a larger model than the web demo's v2.
 * **Animation is uneven.** Motion is usually right; keeping the character recognisable after a turn often is not.
   Dark sprites tend to collapse into a silhouette, 16 px more than 32 px, and animals fare better than humans in
   profile. Try another sprite of the same run, another seed, or 32 px.
@@ -81,8 +88,8 @@ downloads them from Hugging Face:
 
 | Model | Repository | Licence |
 |---|---|---|
-| pixelsprite canvas v2 (text → sprite) | [`ihor-umanets/pixelsprite-canvas-v2`](https://huggingface.co/ihor-umanets/pixelsprite-canvas-v2) | CC BY-NC 4.0 |
-| AnimGPT (sprite → animation) | [`ihor-umanets/pixelsprite-animgpt`](https://huggingface.co/ihor-umanets/pixelsprite-animgpt) | CC BY-NC 4.0, "Built with Qwen" |
+| pixelsprite canvas v3 (text → sprite) | [`ihor-umanets/pixelsprite-canvas-v3`](https://huggingface.co/ihor-umanets/pixelsprite-canvas-v3) | CC BY-NC 4.0 |
+| AnimGPT v3 (sprite → animation) | [`ihor-umanets/pixelsprite-animgpt-v3`](https://huggingface.co/ihor-umanets/pixelsprite-animgpt-v3) | CC BY-NC 4.0, "Built with Qwen" |
 | Text encoder | [`Xenova/paraphrase-multilingual-MiniLM-L12-v2`](https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2) | Apache-2.0 (base model) |
 
 Everything else that ships in the zip or is downloaded is listed in [`THIRD_PARTY.md`](THIRD_PARTY.md).

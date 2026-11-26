@@ -8,15 +8,15 @@ Paths such as `pilot3d/…`, `release/…` and `docs/demo/…` point into the au
 self-test modes that compare against PyTorch or the 3D-farm renders need those files and are for reference.
 
 A native Windows desktop app (Rust, egui/eframe, ONNX Runtime). Flow: type a caption, generate sprites with
-**pixelsprite canvas v2** (or load a PNG sprite), pick one, decide whether it can be animated and as what (human /
+**pixelsprite canvas v3** (or load a PNG sprite), pick one, decide whether it can be animated and as what (human /
 quadruped / bird), set the animation conditions and watch the loop, then export a sprite sheet or a GIF.
 
 **Status:** sprite generation is the real model, a port of the web demo's `engine.js` + `mix.js` with every stage-1
 feature of the published demo (v=12): caption mixing ("burger skull" draws skull-burgers, each sprite its own way),
 silhouettes (draw / one shape), the example captions, guidance / temperature / top-p, the filter, up to 32 sprites with
-the demo's row budget, and saving with the demo's file names. For a caption, size, seed and settings it draws **the
-web demo's sprites**, pixel for pixel (checked against the demo's own JavaScript run headless; see *Parity with the web
-demo*). It runs on CUDA, DirectML or the CPU. **Animation is the real model too:** AnimGPT
+the demo's row budget, and saving with the demo's file names. With the demo's model (canvas v2, set in `models.generator`)
+it draws **the web demo's sprites** for a caption, size, seed and settings, pixel for pixel (checked against the
+demo's own JavaScript run headless; see *Parity with the web demo*); the built-in model is canvas v3. It runs on CUDA, DirectML or the CPU. **Animation is the real model too:** AnimGPT
 (`pilot3d/train/anim_model.py`, run `anim39`) in ONNX Runtime, on the sprite model's provider, drawn on a background
 thread; it turns the character to each direction and then draws the action frame by frame (see *The animation
 model*). The procedural mock (labelled MOCK) and playback of the 3D-farm renders (Library) are still there.
@@ -34,10 +34,12 @@ target\release\animator_ui.exe
   the exe, and the provider DLLs (`onnxruntime_providers_cuda.dll`, `DirectML.dll`, …) are copied next to it.
   Keep them together if you move the exe.
 * First start: the models are downloaded with Windows' own `curl.exe` (`src/fetch.rs`, `src/files.rs`) into
-  `models\`: the sprite model `ihor-umanets/pixelsprite-canvas-v2` (at the commit the web demo pins; `decoder.f16`
-  is expanded once to a float32 `decoder.data`, 153 MB), the text encoder
+  `models\`: the sprite model `ihor-umanets/pixelsprite-canvas-v3` (at a pinned commit; `decoder.f16`, 200 MB, is
+  expanded once to a float32 `decoder.data`, 400 MB), the text encoder
   `Xenova/paraphrase-multilingual-MiniLM-L12-v2`, the demo's lexicon and example captions (from the pixelsprite
-  repository) and the animation model `ihor-umanets/pixelsprite-animgpt` (`onnx/*`, 157 MB). In a development
+  repository) and the animation model `ihor-umanets/pixelsprite-animgpt-v3` (`onnx/*`, 157 MB). v0.1.0 used
+  `pixelsprite-canvas-v2` and `pixelsprite-animgpt`; the v3 pair has its own cache folders, so an old `models\`
+  folder is not reused for it. In a development
   checkout next to the training workspace the sprite model and the lexicon are copied from `..\release\` instead.
 * `scripts\package.ps1` builds the release zip (`dist\`).
 * `target\release\selftest.exe` is a headless check of the same code paths (see *Verification*).
@@ -159,8 +161,39 @@ onnx onnxscript onnxruntime`), then `PYTHONPATH=<dir> .venv\Scripts\python.exe p
   "anim_cuda_mem_limit_mb": 3072,
   "ref_from_walk_front": false
 }
+```
+
 All keys are optional; the defaults are the values shown, relative to this folder. `ANIMATOR_UI_HOME` overrides
 where the app folder is.
+
+### Choosing the pair of models (`models`)
+
+```json
+{
+  "models": {
+    "generator": { "repo": "ihor-umanets/pixelsprite-canvas-v2", "revision": "0a29494e9fc0" },
+    "animator":  { "dir": "D:/models/my-animator" }
+  }
+}
+```
+
+`generator` is the text -> sprite model, `animator` the sprite -> views / frames model. Each entry is either a
+Hugging Face repo or a local folder; an entry that is left out means the built-in model.
+
+* `repo`: `owner/name` or `https://huggingface.co/owner/name`. `revision`: a commit, tag or branch; without it the
+  built-in repo uses its pinned commit and any other repo uses `main`. Files are downloaded once and never
+  refreshed, so pin a commit (or delete the model's folder under `models/` to download again).
+* `dir`: a local folder laid out as the repo (wins over `repo`; a relative path is taken from this folder). The
+  generator needs `onnx/decoder.onnx`, `onnx/decoder_static.onnx`, `onnx/decoder.f16`, `onnx/embeddings.json`,
+  `onnx/embeddings.bin` and `palette.json`; the animator needs `prefill.onnx`, `step.onnx`, `step_grow.onnx`,
+  `anim.data`, `embeddings.json` and `embeddings.bin` in the folder or in its `onnx` subfolder (used in place).
+* A private or gated repo needs a read token in the `HF_TOKEN` environment variable (passed to curl through its
+  standard input, never on the command line).
+* Every source has its own cache folder (`models/v2-<name>-<hash>`, `models/animator-<name>-<hash>`), so switching
+  the pair never mixes files; the built-in pair keeps `models/v3` (`v3_download`) and `models/animator-v3`. A configured model is
+  named in the start-up notes; a broken entry is reported there and the built-in model is not used instead.
+* The models must have the file formats above (the exports of `export_onnx.py` / `export_anim_onnx.py`). Width,
+  depth and heads are read from `embeddings.json`; a model with extra inputs needs support in the code.
 
 ## The UI
 

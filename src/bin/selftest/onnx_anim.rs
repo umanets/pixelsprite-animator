@@ -122,7 +122,7 @@ pub(super) fn onnx_anim(cfg: &Config) -> anyhow::Result<()> {
     let sizes: Vec<usize> = arg("--sizes").unwrap_or_else(|| "32,16".into()).split(',').filter_map(|s| s.trim().parse().ok()).collect();
     let mut rep = Report(Vec::new());
     rep.line(format!("DLL search: {}", dll.summary()));
-    let anim = OnnxAnimator::new();
+    let anim = OnnxAnimator::with_dir(animator_ui::files::animator_dir(&cfg));
     let opts = SessionOpts { cuda_mem_limit_mb: cfg.anim_cuda_mem_limit_mb.unwrap_or(ANIM_CUDA_MEM_LIMIT_MB), ..Default::default() };
     anim.set_providers(choice.order(), opts);
     let t = anim.tables()?;

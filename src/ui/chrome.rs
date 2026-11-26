@@ -105,6 +105,21 @@ impl App {
             p.circle_filled(dot, 9.0, dot_fill);             if *state == 2 {                 kit::check_mark(&p, Rect::from_center_size(dot, Vec2::splat(9.0)), Color32::WHITE);             } else {                 let gal = p.layout_no_wrap(n.to_string(), theme::font_mono_med(10.5), digit_color);                 p.galley(pos2(dot.x - gal.size().x / 2.0, dot.y - gal.size().y / 2.0), gal, Color32::WHITE);             }
             let font = if *state == 1 { theme::font_med(13.0) } else { theme::font(13.0) };
             kit::text_at(ui, pos2(dot.x + 9.0 + 8.0, r.center().y - 8.0), label, font, label_color);
+            // a click takes you to the step: Animate without a sprite opens the file dialog, Export writes the GIF
+            let tip = match i {
+                0 => "Type a caption on the left and press Generate",
+                1 if gen_done => "Pick an action and a direction on the right, then press Animate",
+                1 => "Animate your own image: click to load it (no generation needed)",
+                _ => "Export the animation as a GIF",
+            };
+            let resp = ui.interact(r, ui.scope_id().with(("step", i)), Sense::click()).on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
+            if resp.clicked() {
+                match i {
+                    1 if !gen_done => self.start_png_pick(ui.ctx()),
+                    2 if self.anim.result.is_some() => self.export_selected(ExportKind::Gif),
+                    _ => {}
+                }
+            }
             x += w + 2.0;
         }
         // the bar's bottom border
@@ -209,10 +224,11 @@ impl App {
             Some(e) => (e.clone(), theme::DANGER),
             None => (self.status.clone(), theme::TEXT_MUTED),
         };
-        let gal = p.layout_no_wrap(msg.0, theme::font(12.0), msg.1);
-        if x + gal.size().x < x_max {
-            p.galley(pos2(x, cy - gal.size().y / 2.0), gal.clone(), Color32::WHITE);
-            x += gal.size().x + 20.0;
+        let gal = p.layout_no_wrap(msg.0.lines().next().unwrap_or_default().to_owned(), theme::font(12.0), msg.1);
+        if x + 40.0 < x_max {
+            let clip = Rect::from_min_max(pos2(x, cy - 12.0), pos2(x_max, cy + 12.0));
+            p.with_clip_rect(clip).galley(pos2(x, cy - gal.size().y / 2.0), gal.clone(), Color32::WHITE);
+            x = (x + gal.size().x + 20.0).min(x_max);
         }
         if let Some(s) = &self.cudnn_done {
             let gal = p.layout_no_wrap(s.clone(), theme::font(12.0), theme::SUCCESS);

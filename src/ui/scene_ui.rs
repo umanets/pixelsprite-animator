@@ -47,6 +47,8 @@ impl App {
         self.scene.laid_out = speeds;
         self.scene.stopped = false;
         self.scene.progress = None;
+        self.scene.idle = false;
+        let go = std::mem::take(&mut self.scene.go);
         if let Some(t) = self.scene.pending.take() {
             t.stop();
         }
@@ -56,8 +58,13 @@ impl App {
             self.scene.is_mock = false;
             self.scene.show = kind == Kind::Human;
             if kind == Kind::Human {
-                let job = Job::Scene { sprite: sprite.clone(), kind, size: sprite.size, script, refk: self.onnx_refk() };
-                self.scene.pending = Some(self.jobs.submit(job));
+                // five clips of the model: only when the user asks for the scene (the Build button)
+                if go {
+                    let job = Job::Scene { sprite: sprite.clone(), kind, size: sprite.size, script, refk: self.onnx_refk() };
+                    self.scene.pending = Some(self.jobs.submit(job));
+                } else {
+                    self.scene.idle = true;
+                }
             }
             return;
         }
@@ -149,11 +156,28 @@ impl App {
             });
             return;
         }
+        if self.scene.idle && self.scene.scene.is_none() {
+            ui.horizontal(|ui| {
+                ui.add(egui::Label::new(kit::semi_txt("Fight scene", 14.0).color(theme::TEXT_PRIMARY)));
+                ui.add_space(8.0);
+                if kit::button(ui, "Build the scene", kit::Btn::Primary)
+                    .on_hover_text("The model draws walk, spin kick, punch and run for this character and strings them into one timeline.")
+                    .clicked()
+                {
+                    self.scene.go = true;
+                    self.scene.key = None;
+                }
+                ui.add_space(8.0);
+                ui.add(egui::Label::new(kit::txt("walk · spin kick · punch · run, drawn by the model on request", 12.0).color(theme::TEXT_SECONDARY)));
+            });
+            return;
+        }
         if self.scene.stopped && self.scene.scene.is_none() {
             ui.horizontal(|ui| {
                 ui.add(egui::Label::new(kit::semi_txt("Fight scene", 14.0).color(theme::TEXT_PRIMARY)));
                 ui.add(egui::Label::new(kit::txt("stopped · finished clips are kept", 12.0).color(theme::TEXT_SECONDARY)));
                 if kit::button(ui, "Draw the scene", kit::Btn::Ghost).clicked() {
+                    self.scene.go = true;
                     self.scene.key = None;
                 }
             });
@@ -320,20 +344,19 @@ impl App {
             p.rect(rect, theme::R_CARD, theme::BG_APP, Stroke::new(1.0, theme::BORDER_SUBTLE), StrokeKind::Inside);
             let inner = rect.shrink(1.0);
             let size = sc.size as f32;
-            let scale = (inner.height() * 0.78 / size).floor().clamp(1.0, 8.0);
+            // The whole stage is on the card, so the character really comes in from beyond one edge and leaves
+            // beyond the other: whole screen pixels per stage pixel, the stage centred (a few pixels of it may
+            // fall outside the card when the scale rounds up).
+            let scale = (inner.width() / sc.stage_w as f32).round().clamp(1.0, 8.0);
             let sprite_h = size * scale;
             kit::checker(ui, inner, (scale * 2.0).max(5.0));
             let shot = sc.shots[shown];
             if let Some((c, f)) = shot.sprite {
                 if let Some(t) = self.scene.textures.get(c).and_then(|v| v.get(f)) {
-                    // the stage is wider than the card: the shot's x maps onto the card, clipped to it
-                    let travel = (sc.stage_w as f32 - size).max(1.0);
-                    let frac = (shot.x as f32 / travel).clamp(0.0, 1.0);
-                    let floor = inner.center().y + sprite_h * 0.5;
-                    let r = Rect::from_min_size(
-                        pos2(inner.left() + (inner.width() - sprite_h) * frac, floor - sprite_h),
-                        Vec2::splat(sprite_h),
-                    );
+                    // the shot's x is in stage pixels and may be off the stage: no clamping, the card clips it
+                    let stage_left = (inner.center().x - sc.stage_w as f32 * scale * 0.5).round();
+                    let floor = (inner.center().y + sprite_h * 0.5).round();
+                    let r = Rect::from_min_size(pos2(stage_left + shot.x as f32 * scale, floor - sprite_h), Vec2::splat(sprite_h));
                     p.with_clip_rect(inner).image(t.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                 }
             }

@@ -131,7 +131,7 @@ impl AnimatorChoice {
         match self {
             AnimatorChoice::Mock => "Mock (procedural placeholder)",
             AnimatorChoice::Library => "Library (3D farm renders)",
-            AnimatorChoice::Onnx => "ONNX model (anim39)",
+            AnimatorChoice::Onnx => "ONNX model (animgpt-v3)",
         }
     }
 }
@@ -173,6 +173,10 @@ pub(crate) struct AnimState {
     /// Build every animation from the first frame of walk at 0° (front) instead of the original sprite.
     pub(crate) ref_from_walk_front: bool,
     /// ONNX animator: the request being drawn on the animation thread, its progress, and whether the user stopped it.
+    /// The animation model draws only when asked: `go` is set by the Animate / Build button (and consumed by the
+    /// next refresh), `idle` means "nothing drawn for the current settings yet, waiting for the button".
+    pub(crate) go: bool,
+    pub(crate) idle: bool,
     pub(crate) pending: Option<Ticket>,
     pub(crate) progress: Option<AnimProgress>,
     pub(crate) stopped: bool,
@@ -214,6 +218,10 @@ pub(crate) struct SceneState {
     pub(crate) laid_out: (f32, f32),
     pub(crate) last_export: Option<(String, PathBuf)>,
     /// ONNX animator: the scene being built on the animation thread.
+    /// The animation model draws only when asked: `go` is set by the Animate / Build button (and consumed by the
+    /// next refresh), `idle` means "nothing drawn for the current settings yet, waiting for the button".
+    pub(crate) go: bool,
+    pub(crate) idle: bool,
     pub(crate) pending: Option<Ticket>,
     pub(crate) progress: Option<AnimProgress>,
     pub(crate) stopped: bool,
@@ -268,6 +276,10 @@ pub(crate) struct App {
     pub(crate) size: usize,
     pub(crate) seed: u32,
     pub(crate) auto_seed: bool,
+    /// The Outline checkbox (only for a generator that knows the outline words, see `outline_words`).
+    pub(crate) outline: bool,
+    /// The loaded generator understands ", with outline" / ", no outline".
+    pub(crate) outline_words: bool,
     pub(crate) count: usize,
     /// "How many" follows the size (8 / 4) until the user sets it.
     pub(crate) count_touched: bool,
@@ -334,6 +346,16 @@ pub(crate) struct App {
     pub(crate) loaded_id: u64,
     pub(crate) png_path: String,
     pub(crate) png_error: Option<String>,
+    /// Why the last generation failed (shown under the Generate button until the next one starts).
+    pub(crate) gen_error: Option<String>,
+    /// The question asked when an image is loaded: as it is, with an outline, or with an inline.
+    pub(crate) png_prep: Option<PrepDialog>,
+    /// How the loaded sprite was prepared.
+    pub(crate) png_prep_used: Option<PngPrep>,
+    /// The loaded sprite's gallery card.
+    pub(crate) loaded_tex: Option<(u64, TextureHandle)>,
+    /// The file dialog of "Load…" runs in its own process; its answer arrives here.
+    pub(crate) png_pick: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
     pub(crate) settings_open: bool,
     pub(crate) demo: Option<Demo>,
 }
@@ -393,4 +415,53 @@ mod tests {
         assert_eq!(Card::new(CardTag::Source).tag, CardTag::Source);
         assert_eq!(Card::new(CardTag::Index(3)).tag.file_tag(), "03");
     }
+}
+
+/// How a loaded image is prepared for the animation model, which was trained on sprites drawn with a dark outline.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum PngPrep {
+    /// Nothing is changed.
+    AsIs,
+    /// A one-pixel dark line around the silhouette, in the free pixels next to it.
+    Outline,
+    /// The silhouette's own edge pixels repainted dark.
+    Inline,
+}
+
+impl PngPrep {
+    pub(crate) const ALL: [PngPrep; 3] = [PngPrep::AsIs, PngPrep::Outline, PngPrep::Inline];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            PngPrep::AsIs => "As it is",
+            PngPrep::Outline => "Outline",
+            PngPrep::Inline => "Inline",
+        }
+    }
+
+    pub(crate) fn describe(self) -> &'static str {
+        match self {
+            PngPrep::AsIs => "nothing is changed",
+            PngPrep::Outline => "a dark line around the sprite",
+            PngPrep::Inline => "the sprite's own edge is painted dark",
+        }
+    }
+
+    pub(crate) fn apply(self, s: &Sprite) -> Sprite {
+        match self {
+            PngPrep::AsIs => s.clone(),
+            PngPrep::Outline => s.outlined(),
+            PngPrep::Inline => s.inlined(),
+        }
+    }
+}
+
+/// An image that was read and waits for the user's choice of [`PngPrep`].
+pub(crate) struct PrepDialog {
+    pub(crate) name: String,
+    pub(crate) factor: usize,
+    pub(crate) fitted: bool,
+    /// The three results, in the order of [`PngPrep::ALL`], and their previews (made on first show).
+    pub(crate) variants: Vec<(PngPrep, Sprite, Option<TextureHandle>)>,
+    pub(crate) recommended: PngPrep,
 }

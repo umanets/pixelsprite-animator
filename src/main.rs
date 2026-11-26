@@ -81,7 +81,7 @@ impl App {
         let ctx = cc.egui_ctx.clone();
         let lib_scan = Some(Scanner::start(cfg.library_roots(), Box::new(move || ctx.request_repaint())));
         let ctx = cc.egui_ctx.clone();
-        let jobs = AnimJobs::spawn(Arc::new(OnnxAnimator::new()), Box::new(move || ctx.request_repaint()));
+        let jobs = AnimJobs::spawn(Arc::new(OnnxAnimator::with_dir(animator_ui::files::animator_dir(&cfg))), Box::new(move || ctx.request_repaint()));
         let ref_from_walk_front = cfg.ref_from_walk_front.unwrap_or(false);
         let mut app = App {
             cfg,
@@ -102,6 +102,8 @@ impl App {
             size: 16,
             seed: 1,
             auto_seed: false,
+            outline: true,
+            outline_words: false,
             count: 8,
             count_touched: false,
             g_shape: 1.0,
@@ -158,6 +160,8 @@ impl App {
                 error: None,
                 lib_size: 32,
                 ref_from_walk_front,
+                go: false,
+                idle: false,
                 pending: None,
                 progress: None,
                 stopped: false,
@@ -177,6 +181,8 @@ impl App {
                 run_speed: scene::RUN_SPEED,
                 laid_out: (scene::WALK_SPEED, scene::RUN_SPEED),
                 last_export: None,
+                go: false,
+                idle: false,
                 pending: None,
                 progress: None,
                 stopped: false,
@@ -190,6 +196,11 @@ impl App {
             loaded_id: 0,
             png_path: String::new(),
             png_error: None,
+            gen_error: None,
+            png_prep: None,
+            png_prep_used: None,
+            loaded_tex: None,
+            png_pick: None,
             settings_open: false,
             demo,
         };
@@ -267,7 +278,7 @@ impl eframe::App for App {
         self.poll(&ctx);
         if let Some(path) = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty())) {
             self.png_path = path.display().to_string();
-            self.load_png();
+            self.load_png(None);
         }
         self.drive_demo(&ctx);
         // Esc stops a running generation (the Stop button's kbd hint)
@@ -279,6 +290,7 @@ impl eframe::App for App {
         // ---- the 52 px top bar
         let top_r = egui::Panel::top("top").exact_size(theme::TOP_BAR_H).frame(bg(theme::BG_PANEL, 0, 0, 0, 0)).show(ui, |ui| self.top_bar(ui)).response.rect;
         self.settings_window(&ctx);
+        self.prep_window(&ctx);
         // ---- the 28 px status bar
         let status_r = egui::Panel::bottom("status").exact_size(theme::STATUS_H).frame(bg(theme::BG_PANEL, 0, 0, 0, 0)).show(ui, |ui| self.status_bar(ui)).response.rect;
         // ---- the 320 px Generate + Library column, the full height of the body

@@ -214,6 +214,9 @@ impl AnimTables {
         self.add(x, "frame_emb", c.frame.min(self.max_frames - 1));
         self.add(x, "nfr_emb", c.nfr.min(self.max_frames));
         self.add(x, "seg", 0);
+        if self.idx.contains_key("ol_emb") {
+            self.add(x, "ol_emb", self.outline_of(s, reference));
+        }
         for (canvas, seg) in [(reference, 1usize), (prev, 2)] {
             for p in 0..s * s {
                 let r = next();
@@ -225,11 +228,55 @@ impl AnimTables {
         debug_assert_eq!(o, self.context_len(s) * d);
     }
 
+    /// True for a model with the outline condition (AnimGPT3, table `ol_emb`: 0 no outline, 1 outlined).
+    pub fn has_outline_condition(&self) -> bool {
+        self.idx.contains_key("ol_emb")
+    }
+
+    /// The outline id of a canvas of tokens, by the rule the training data was labelled with (`dark_outline` of
+    /// export_anim3_onnx.py): the commonest colour of the silhouette's edge ring is dark (luma < 110) and at least
+    /// 60 % of the ring is within 36 (RGB distance) of it; fewer than 20 filled pixels = no outline.
+    pub fn outline_of(&self, s: usize, canvas: &[u16]) -> usize {
+        let filled = |x: i32, y: i32| x >= 0 && y >= 0 && (x as usize) < s && (y as usize) < s && (canvas[y as usize * s + x as usize] as usize) < self.empty;
+        let (mut n, mut ring) = (0usize, Vec::new());
+        for y in 0..s as i32 {
+            for x in 0..s as i32 {
+                if !filled(x, y) {
+                    continue;
+                }
+                n += 1;
+                if !(filled(x - 1, y) && filled(x + 1, y) && filled(x, y - 1) && filled(x, y + 1)) {
+                    ring.push(canvas[y as usize * s + x as usize] as usize);
+                }
+            }
+        }
+        if n < 20 || ring.is_empty() {
+            return 0;
+        }
+        let mut count: HashMap<usize, usize> = HashMap::new();
+        for &t in &ring {
+            *count.entry(t).or_default() += 1;
+        }
+        // the commonest token, the smallest one on a tie (numpy's bincount().argmax())
+        let top = count.iter().map(|(&t, &c)| (c, std::cmp::Reverse(t))).max().map(|(_, t)| t.0).unwrap_or(0);
+        let rgb = |t: usize| self.palette[t].map(f64::from);
+        let oc = rgb(top);
+        if 0.3 * oc[0] + 0.59 * oc[1] + 0.11 * oc[2] >= 110.0 {
+            return 0;
+        }
+        let near = ring.iter().filter(|&&t| rgb(t).iter().zip(&oc).map(|(a, b)| (a - b) * (a - b)).sum::<f64>().sqrt() < 36.0).count();
+        usize::from(near as f64 >= 0.6 * ring.len() as f64)
+    }
+
     pub fn kind_index(&self, kind: Kind) -> Result<usize> {
         self.kinds.iter().position(|k| k == kind.label()).ok_or_else(|| anyhow!("the model has no kind {}", kind.label()))
     }
     pub fn action_index(&self, action: &str) -> Result<usize> {
         self.actions.iter().position(|a| a == action).ok_or_else(|| anyhow!("the model has no action {action}"))
+    }
+    /// The azimuths the model knows, in its order (0, 45 ... 315).
+    pub fn all_azimuths(&self) -> &[u16] {
+        &self.azimuths
     }
     pub fn az_index(&self, az: u16) -> Result<usize> {
         self.azimuths.iter().position(|&a| a == az).ok_or_else(|| anyhow!("the model has no azimuth {az}"))

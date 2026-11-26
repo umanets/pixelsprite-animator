@@ -55,6 +55,7 @@ pub(super) fn parity(h: &mut Headless, reference: &std::path::Path, out: &std::p
             ..Default::default()
         };
         let mix = MixOptions {
+            outline: None,
             enabled: c["variants"].as_array().map(|v| v.iter().filter_map(|k| VariantKind::parse(k.as_str().unwrap_or_default())).collect()).unwrap_or_else(|| VariantKind::ALL.to_vec()),
             overrides: c["overrides"].as_object().map(|o| o.iter().filter_map(|(k, v)| Some((k.clone(), ConceptKind::parse(v.as_str()?)?))).collect()).unwrap_or_default(),
             learned: Default::default(),

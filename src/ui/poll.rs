@@ -6,11 +6,13 @@ impl App {
     // ------------------------------------------------------------------------------------------- messages
     pub(crate) fn poll(&mut self, ctx: &egui::Context) {
         self.poll_library_scan(ctx);
+        self.poll_png_pick();
         self.poll_jobs(ctx);
         while let Ok(msg) = self.worker.rx.try_recv() {
             match msg {
                 Msg::Status(s) => self.status = s,
-                Msg::Loaded { ep, describe, fallbacks, secs, palette, lexicon, presets } => {
+                Msg::Loaded { ep, describe, fallbacks, secs, palette, lexicon, presets, outline_words } => {
+                    self.outline_words = outline_words;
                     self.lexicon = lexicon;
                     self.presets = presets;
                     // the animation model follows the sprite model's provider (with the CPU as the fallback)
@@ -100,10 +102,16 @@ impl App {
                     if let Some(run) = self.runs.iter_mut().find(|x| x.id == id) {
                         run.done = true;
                         run.error = Some(error.to_string());
+                        // cards that were never drawn would stay "queued" for ever
+                        run.cards.retain(|c| c.sprite.is_some());
                     }
+                    self.runs.retain(|r| !(r.id == id && r.cards.is_empty()));
                     self.status = match error {
                         Failure::Cancelled => "Stopped.".into(),
-                        Failure::Failed(why) => format!("Generation failed: {why}"),
+                        Failure::Failed(why) => {
+                            self.gen_error = Some(explain_gen_failure(&why, self.size, self.count));
+                            format!("Generation failed: {why}")
+                        }
                     };
                 }
                 Msg::CudnnDone(r) => {
@@ -162,6 +170,7 @@ impl App {
     }
 
     pub(crate) fn start_generation(&mut self) {
+        self.gen_error = None;
         if self.auto_seed {
             self.seed = rand_u32() % 1_000_000;
         }
@@ -171,6 +180,10 @@ impl App {
         }
         let id = self.next_id;
         self.next_id += 1;
+        // a generator with the outline words gets the command from the checkbox; the same words typed in the
+        // caption are taken out (they would be mixed as if they were things to draw)
+        let outline = self.outline_words.then_some(self.outline);
+        let caption = if outline.is_some() { strip_outline_words(&self.caption) } else { self.caption.trim().to_string() };
         let params = GenParams {
             vector: None,
             n: self.count,
@@ -194,7 +207,7 @@ impl App {
             0,
             Run {
                 id,
-                caption: self.caption.trim().to_string(),
+                caption: format!("{caption}{}", animator_ui::worker::outline_suffix(outline)),
                 size: self.size,
                 seed: self.seed,
                 cards,
@@ -208,8 +221,8 @@ impl App {
         self.runs.truncate(12);
         self.progress = (0, 0, 0, self.count);
         self.running = Some((id, Instant::now()));
-        let mix = MixOptions { enabled: self.variants_on.clone(), overrides: self.kind_override.clone(), learned: self.learned_kind.clone(), encoder_ready: self.encoder_ready };
-        self.worker.send(Cmd::Generate(GenRequest { id, caption: self.caption.clone(), params, mode: self.mode, mix }));
+        let mix = MixOptions { enabled: self.variants_on.clone(), overrides: self.kind_override.clone(), learned: self.learned_kind.clone(), encoder_ready: self.encoder_ready, outline };
+        self.worker.send(Cmd::Generate(GenRequest { id, caption, params, mode: self.mode, mix }));
     }
 
     pub(crate) fn new_pad(&mut self, size: usize) {
@@ -271,5 +284,48 @@ impl App {
             Ok(p) => (format!("Saved {}", p.display()), p),
             Err(e) => (format!("Save failed: {e:#}"), dir),
         });
+    }
+}
+
+/// A failed generation in words the user can act on (the raw error stays in the status bar).
+pub(crate) fn explain_gen_failure(why: &str, size: usize, count: usize) -> String {
+    let short: String = why.lines().next().unwrap_or(why).chars().take(160).collect();
+    if why.contains("BFCArena") || why.contains("Available memory") || why.to_lowercase().contains("out of memory") {
+        format!(
+            "Nothing was drawn: not enough GPU memory for {count} sprites at {size}\u{d7}{size}. Lower Count or the size, or raise \
+             cuda_mem_limit_mb in animator_ui.json (and restart)."
+        )
+    } else {
+        format!("Nothing was drawn: {short}")
+    }
+}
+
+/// The caption without outline commands typed by hand ("..., no outline", "with outline", "without outline").
+pub(crate) fn strip_outline_words(caption: &str) -> String {
+    let mut out = caption.to_string();
+    for phrase in ["without outline", "with outline", "no outline"] {
+        while let Some(i) = out.to_lowercase().find(phrase) {
+            // to_lowercase keeps byte offsets for the ASCII phrase only if the text before it kept its length
+            if !out.is_char_boundary(i) || !out.is_char_boundary(i + phrase.len()) || !out[i..i + phrase.len()].eq_ignore_ascii_case(phrase) {
+                break;
+            }
+            out.replace_range(i..i + phrase.len(), "");
+        }
+    }
+    let cleaned: Vec<&str> = out.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+    cleaned.join(", ")
+}
+
+#[cfg(test)]
+mod outline_tests {
+    use super::strip_outline_words;
+
+    #[test]
+    fn typed_outline_commands_are_removed() {
+        assert_eq!(strip_outline_words("a knight, no outline"), "a knight");
+        assert_eq!(strip_outline_words("a knight with a sword, With Outline "), "a knight with a sword");
+        assert_eq!(strip_outline_words("red potion without outline"), "red potion");
+        assert_eq!(strip_outline_words("лицар, no outline, щит"), "лицар, щит");
+        assert_eq!(strip_outline_words("outline of a map"), "outline of a map");
     }
 }

@@ -12,7 +12,12 @@ impl App {
         kit::section_header(ui, "2", "Animate");
         ui.add_space(14.0);
         let Some((sprite, caption, class)) = self.selected_sprite() else {
-            ui.add(egui::Label::new(kit::txt("Select a generated sprite (or a library entry).", 13.0).color(theme::TEXT_SECONDARY)));
+            ui.add(egui::Label::new(kit::txt("Pick a generated sprite, or animate your own image without generating anything.", 13.0).color(theme::TEXT_SECONDARY)));
+            ui.add_space(12.0);
+            let label = if self.png_pick.is_some() { "Pick a file in the dialog\u{2026}" } else { "Load image\u{2026}" };
+            if kit::button(ui, label, kit::Btn::Primary).clicked() {
+                self.start_png_pick(&ctx);
+            }
             return;
         };
         // ---- the selected sprite card (307 × 90)
@@ -91,7 +96,7 @@ impl App {
             ui.scope(|ui| {
                 ui.style_mut().spacing.interact_size.y = 32.0;
                 let label = match self.anim.animator {
-                    AnimatorChoice::Onnx => format!("\u{25CF} ONNX model · anim39"),
+                    AnimatorChoice::Onnx => format!("\u{25CF} ONNX model · animgpt-v3"),
                     AnimatorChoice::Mock => "Mock · procedural".to_string(),
                     AnimatorChoice::Library => "Library · 3D farm".to_string(),
                 };

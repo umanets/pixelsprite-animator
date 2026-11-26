@@ -33,7 +33,14 @@ impl App {
         match d.stage {
             0 if d.get("png").is_some() && !self.loading => {
                 self.png_path = d.get("png").unwrap_or_default().to_string();
-                self.load_png();
+                // prep=asis|outline|inline (the recommended one without it), prep=ask leaves the dialog open
+                match d.get("prep") {
+                    Some("ask") => self.load_png(None),
+                    Some("asis") => self.load_png(Some(Some(PngPrep::AsIs))),
+                    Some("outline") => self.load_png(Some(Some(PngPrep::Outline))),
+                    Some("inline") => self.load_png(Some(Some(PngPrep::Inline))),
+                    _ => self.load_png(Some(None)),
+                }
                 if let Some(e) = &self.png_error {
                     eprintln!("demo: {e}");
                 }
@@ -79,6 +86,9 @@ impl App {
                     self.more_open = Some(true);
                 }
                 self.encoder_ready = d.get("exact") == Some("1");
+                if let Some(o) = d.get("outline") {
+                    self.outline = o == "1";
+                }
                 if let Some(s) = d.get("scale").and_then(|s| s.parse().ok()) {
                     self.save_scale = s;
                 }
@@ -223,13 +233,27 @@ impl App {
     /// Demo keys `animator=`, `kind=` and `refwalk=` (after the sprite is selected).
     pub(crate) fn demo_animator(&mut self, d: &Demo) {
         match d.get("animator") {
-            Some("onnx") => self.anim.animator = AnimatorChoice::Onnx,
+            Some("onnx") => {
+                self.anim.animator = AnimatorChoice::Onnx;
+                // the script stands in for the Animate and Build scene buttons
+                self.anim.go = d.get("go") != Some("0");
+                self.scene.go = d.get("go") != Some("0") && d.get("scene") != Some("0");
+            }
             Some("mock") => self.anim.animator = AnimatorChoice::Mock,
             Some("library") if self.lib_data.is_some() => self.anim.animator = AnimatorChoice::Library,
             _ => {}
         }
         if let Some(k) = d.get("kind").and_then(Kind::parse) {
             self.anim.kind = KindChoice::Force(k);
+        }
+        if let Some(v) = d.get("ref") {
+            let mut st = self.jobs.anim.settings();
+            st.reference = match v {
+                "front" => RefChoice::FrontRender,
+                "original" => RefChoice::Original,
+                _ => RefChoice::Auto,
+            };
+            self.jobs.anim.set_settings(st);
         }
         if let Some(v) = d.get("refwalk") {
             self.anim.ref_from_walk_front = v != "0";

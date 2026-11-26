@@ -18,5 +18,5 @@ mod state;
 
 pub use classify::MAP_THRESHOLD;
 pub use handle::Worker;
-pub use messages::{Cmd, GenRequest, GenResult, MixOptions, Mode, Msg, VariantInfo};
+pub use messages::{Cmd, GenRequest, GenResult, MixOptions, Mode, Msg, VariantInfo, outline_suffix};
 pub use presets::b64_floats;

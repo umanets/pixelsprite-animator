@@ -7,8 +7,8 @@ them on its first start, and they keep their own, non-commercial licences.
 
 | Model | Source | Licence |
 |---|---|---|
-| pixelsprite canvas v2 (text → sprite) | `ihor-umanets/pixelsprite-canvas-v2` on Hugging Face | CC BY-NC 4.0 |
-| AnimGPT (sprite → animation) | `ihor-umanets/pixelsprite-animgpt` on Hugging Face | CC BY-NC 4.0; trained on renders made with Qwen-Image 2.1, so the Qwen Research License terms apply too ("Built with Qwen"). See the model card. |
+| pixelsprite canvas v3 (text → sprite) | `ihor-umanets/pixelsprite-canvas-v3` on Hugging Face | CC BY-NC 4.0 |
+| AnimGPT v3 (sprite → animation) | `ihor-umanets/pixelsprite-animgpt-v3` on Hugging Face | CC BY-NC 4.0; trained on renders made with Qwen-Image 2.1, so the Qwen Research License terms apply too ("Built with Qwen"). See the model card. |
 | Text encoder | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX build of `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) | Apache-2.0 (base model) |
 | Caption-mixing lexicon and example captions | `github.com/umanets/pixelsprite`, `docs/demo` | Apache-2.0 |
 

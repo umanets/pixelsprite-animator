@@ -51,11 +51,14 @@ pub struct MixOptions {
     /// the Russian / Ukrainian example captions mix). Off = a fresh demo page: the normalised sum of the word
     /// vectors when every word is in the lexicon.
     pub encoder_ready: bool,
+    /// Outline command of a generator that knows the outline words: Some(true) = ", with outline", Some(false) =
+    /// ", no outline" is added to the caption and to every mixed word before it is encoded; None = nothing is added.
+    pub outline: Option<bool>,
 }
 
 impl Default for MixOptions {
     fn default() -> Self {
-        MixOptions { enabled: VariantKind::ALL.to_vec(), overrides: HashMap::new(), learned: HashMap::new(), encoder_ready: false }
+        MixOptions { enabled: VariantKind::ALL.to_vec(), overrides: HashMap::new(), learned: HashMap::new(), encoder_ready: false, outline: None }
     }
 }
 
@@ -87,7 +90,7 @@ pub struct VariantInfo {
 
 pub enum Msg {
     Status(String),
-    Loaded { ep: Ep, describe: String, fallbacks: Vec<String>, secs: f64, palette: Palette, lexicon: Option<Arc<Lexicon>>, presets: Vec<String> },
+    Loaded { ep: Ep, describe: String, fallbacks: Vec<String>, secs: f64, palette: Palette, lexicon: Option<Arc<Lexicon>>, presets: Vec<String>, outline_words: bool },
     LoadFailed(String),
     /// The variant of every sprite, before drawing (mixed captions only); `learned` = kinds of unknown words.
     Planned { id: u64, variants: Vec<VariantInfo>, learned: HashMap<String, ConceptKind> },
@@ -123,4 +126,13 @@ pub struct GenResult {
     pub encode_secs: f64,
     pub ep: Ep,
     pub class: Classification,
+}
+
+/// The words a generator with `outline_words` was trained with, as they end a caption.
+pub fn outline_suffix(outline: Option<bool>) -> &'static str {
+    match outline {
+        Some(true) => ", with outline",
+        Some(false) => ", no outline",
+        None => "",
+    }
 }

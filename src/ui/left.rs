@@ -87,6 +87,20 @@ impl App {
                 }
             }
         });
+        // ---- the outline command (only a generator trained with the outline words has it)
+        if self.outline_words {
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.allocate_ui_with_layout(vec2(44.0, 20.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(kit::txt("Outline", 12.5).color(theme::TEXT_SECONDARY)));
+                });
+                let mut on = self.outline;
+                let label = if on { "dark outline around the sprite" } else { "no outline" };
+                if kit::checkbox(ui, &mut on, label) {
+                    self.outline = on;
+                }
+            });
+        }
         ui.add_space(14.0);
         // ---- seed + random + each time
         ui.horizontal(|ui| {
@@ -278,9 +292,22 @@ impl App {
                 kit::mono_txt(format!("batch {}/{total} · step {t}/{n} · {ms:.1} ms/step", done + 1), 11.5).color(theme::TEXT_MUTED),
             ));
         }
+        if let Some(e) = &self.gen_error {
+            ui.add_space(8.0);
+            ui.add(egui::Label::new(kit::txt(e, 12.5).color(theme::DANGER)).wrap());
+        }
         ui.add_space(14.0);
         // ---- the PNG dropzone
         self.png_dropzone(ui);
+        ui.add_space(8.0);
+        if let (Some(prep), true) = (self.png_prep_used, self.loaded.is_some() && !self.png_path.is_empty()) {
+            let tip = "The animation model was trained on sprites with a dark outline; a thin character without one is \
+                       often drawn as an object. Click to pick again: as it is, an outline around the sprite, or an \
+                       inline on its own edge.";
+            if kit::chip(ui, &format!("prepared: {} \u{b7} change\u{2026}", prep.label().to_lowercase()), false).on_hover_text(tip).clicked() {
+                self.load_png(None);
+            }
+        }
         if let Some(e) = &self.png_error {
             ui.add(egui::Label::new(kit::txt(e, 12.0).color(theme::DANGER)));
         }
@@ -297,8 +324,10 @@ impl App {
         let (rect, resp) = ui.allocate_exact_size(vec2(w, 54.0), Sense::click());
         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
         kit::dashed_rect(ui, rect, theme::BORDER_STRONG);
-        let l1 = p.layout_no_wrap("Drop a PNG sprite here, or Load\u{2026}".into(), theme::font_med(12.5), theme::TEXT_SECONDARY);
-        let l2 = p.layout_no_wrap("16 / 24 / 32 px, or an integer upscale".into(), theme::font(11.0), theme::TEXT_MUTED);
+        let picking = self.png_pick.is_some();
+        let l1 = if picking { "Pick a file in the dialog\u{2026}" } else { "Drop a PNG sprite here, or Load\u{2026}" };
+        let l1 = p.layout_no_wrap(l1.into(), theme::font_med(12.5), theme::TEXT_SECONDARY);
+        let l2 = p.layout_no_wrap("any size: fitted to 16 / 24 / 32 px".into(), theme::font(11.0), theme::TEXT_MUTED);
         let total = l1.size().y + 2.0 + l2.size().y;
         p.galley(pos2(rect.center().x - l1.size().x / 2.0, rect.center().y - total / 2.0), l1.clone(), Color32::WHITE);
         p.galley(
@@ -307,16 +336,16 @@ impl App {
             Color32::WHITE,
         );
         let tip = if self.png_path.is_empty() {
-            "A square 16 / 24 / 32 px sprite, or an integer nearest-neighbour upscale of one. Or just drop it on the window.".to_string()
+            "Animate your own sprite without generating one. A 16 / 24 / 32 px sprite (or an integer upscale of one) is \
+             read as it is; any other image is cropped to its opaque part and fitted to 32 px. Or just drop the file on \
+             the window."
+                .to_string()
         } else {
-            format!("{}\n(the path field of the old layout; click to pick another file)", self.png_path)
+            format!("{}\n(click to pick another file)", self.png_path)
         };
         let resp = resp.on_hover_text(tip);
         if resp.clicked() {
-            if let Some(p) = pick_png() {
-                self.png_path = p.display().to_string();
-                self.load_png();
-            }
+            self.start_png_pick(ui.ctx());
         }
     }
 
